@@ -1,0 +1,186 @@
+# FlowMode Configuration
+# Copy this to ~/.config/flowmode/config.toml
+
+[general]
+# Prefix key for mode switching (Super+1, Super+2, etc.)
+hotkey_modifier = "Super"
+
+# ============================================================================
+# MODES - Your workspace states
+# ============================================================================
+
+[[modes]]
+name = "Meeting"
+description = "Client meeting with Teams and notes"
+hotkey = "1"
+layout = "meeting"
+apps = [
+    { command = "teams-for-linux", zone = "main", focus = true },
+    { command = "obsidian", zone = "sidebar" },
+]
+
+[modes.focus]
+dnd = true           # Enable Do Not Disturb
+pomodoro = false     # No timer during meetings
+
+# ----------------------------------------------------------------------------
+
+[[modes]]
+name = "Work"
+description = "Deep work mode with focus timer"
+hotkey = "2"
+layout = "work"
+apps = [
+    { command = "teams-for-linux", zone = "center" },
+    { command = "obsidian", zone = "right" },
+]
+
+[modes.focus]
+dnd = false
+pomodoro = true
+work_duration = 25   # Override default pomodoro duration
+
+# ----------------------------------------------------------------------------
+
+[[modes]]
+name = "Focus"
+description = "Distraction-free coding/writing"
+hotkey = "3"
+layout = "fullscreen"
+apps = [
+    { command = "code", zone = "main", focus = true },
+]
+
+[modes.focus]
+dnd = true
+pomodoro = true
+
+# ----------------------------------------------------------------------------
+
+[[modes]]
+name = "Browse"
+description = "Casual browsing and communication"
+hotkey = "4"
+layout = "split"
+apps = [
+    { command = "firefox", zone = "left" },
+    { command = "teams-for-linux", zone = "right" },
+]
+
+[modes.focus]
+dnd = false
+pomodoro = false
+
+# ============================================================================
+# LAYOUTS - Window zone definitions (percentages)
+# ============================================================================
+
+[[layouts]]
+name = "meeting"
+# Teams 75% left, Notes 25% right
+zones = [
+    { id = "main", x = 0, y = 0, width = 75, height = 100 },
+    { id = "sidebar", x = 75, y = 0, width = 25, height = 100 },
+]
+
+[[layouts]]
+name = "work"
+# Left toolbar 15%, Center 55%, Right 30%
+zones = [
+    { id = "left", x = 0, y = 0, width = 15, height = 100 },
+    { id = "center", x = 15, y = 0, width = 55, height = 100 },
+    { id = "right", x = 70, y = 0, width = 30, height = 100 },
+]
+
+[[layouts]]
+name = "fullscreen"
+zones = [
+    { id = "main", x = 0, y = 0, width = 100, height = 100 },
+]
+
+[[layouts]]
+name = "split"
+# 50/50 split
+zones = [
+    { id = "left", x = 0, y = 0, width = 50, height = 100 },
+    { id = "right", x = 50, y = 0, width = 50, height = 100 },
+]
+
+[[layouts]]
+name = "thirds"
+zones = [
+    { id = "left", x = 0, y = 0, width = 33, height = 100 },
+    { id = "center", x = 33, y = 0, width = 34, height = 100 },
+    { id = "right", x = 67, y = 0, width = 33, height = 100 },
+]
+
+# ============================================================================
+# FILE ORGANIZER - Auto-sort your downloads and screenshots
+# ============================================================================
+
+[files]
+enabled = true
+watch_dirs = [
+    "~/Downloads",
+    "~/Pictures/Screenshots",
+]
+
+# Rules are processed in order - first match wins
+[[files.rules]]
+name = "PDF Documents"
+pattern = "*.pdf"
+destination = "~/Documents/PDFs/{year}/{month}"
+
+[[files.rules]]
+name = "Teams Downloads"
+pattern = "*teams*"
+destination = "~/Documents/Teams/{year}-{month}"
+
+[[files.rules]]
+name = "Screenshots"
+pattern = "Screenshot*.png"
+destination = "~/Pictures/Organized/{year}/{month}"
+
+[[files.rules]]
+name = "Images"
+pattern = "*.{png,jpg,jpeg,gif,webp}"
+destination = "~/Pictures/Organized/{year}/{month}"
+
+[[files.rules]]
+name = "Videos"
+pattern = "*.{mp4,mkv,avi,mov,webm}"
+destination = "~/Videos/{year}/{month}"
+
+[[files.rules]]
+name = "Archives"
+pattern = "*.{zip,tar,gz,7z,rar}"
+destination = "~/Downloads/Archives"
+
+[[files.rules]]
+name = "Documents"
+pattern = "*.{doc,docx,xls,xlsx,ppt,pptx,odt,ods}"
+destination = "~/Documents/Office/{year}/{month}"
+
+# ============================================================================
+# POMODORO - Focus timer settings
+# ============================================================================
+
+[pomodoro]
+work_duration = 25        # minutes
+short_break = 5           # minutes
+long_break = 15           # minutes
+long_break_after = 4      # pomodoros before long break
+auto_start_breaks = true  # automatically start break timer
+sound_enabled = true      # play sound on timer end
+
+# ============================================================================
+# STATS - Productivity tracking
+# ============================================================================
+
+[stats]
+enabled = true
+db_path = "~/.local/share/flowmode/stats.db"
+# Track time spent in each mode
+track_mode_time = true
+# Track pomodoro completions
+track_pomodoros = true

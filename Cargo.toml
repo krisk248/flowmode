@@ -1,0 +1,46 @@
+[package]
+name = "flowmode"
+version = "0.2.0"
+edition = "2021"
+description = "Privacy-focused activity tracker for Linux"
+authors = ["Kannan"]
+license = "MIT"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full", "signal"] }
+
+# Configuration
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+dirs = "5"
+
+# Database for activity storage
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# System tray
+ksni = "0.2"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# TUI
+ratatui = "0.28"
+crossterm = "0.28"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
