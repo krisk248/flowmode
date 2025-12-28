@@ -9,10 +9,12 @@ Unlike cloud-based alternatives (Wakatime, RescueTime), **all your data stays lo
 - **Privacy-first**: All data stored locally in SQLite
 - **Whitelist-based**: Only tracks apps you explicitly configure
 - **Window titles**: See which browser tabs, terminal folders, or files you worked on
-- **System tray**: Live tracking indicator with pause/resume and idle detection
+- **Web Dashboard**: Beautiful Svelte-based dashboard at localhost:5555
+- **System tray**: Live tracking indicator with "Open Dashboard" button
 - **TUI Dashboard**: Multi-pane terminal UI with tabs (Summary, Detailed, Timeline)
+- **Self-update**: Update with `flowmode update`
 - **Idle detection**: Automatically pauses when you're away
-- **Lightweight**: ~3MB binary, minimal resource usage
+- **Lightweight**: Single binary, minimal resource usage
 
 ## Installation
 
@@ -71,14 +73,17 @@ flowmode dashboard
 
 | Command | Description |
 |---------|-------------|
-| `flowmode start` | Start the tracking daemon |
+| `flowmode start` | Start daemon + web server |
 | `flowmode stop` | Stop the daemon |
+| `flowmode web` | Open web dashboard in browser |
 | `flowmode stats` | Show today's activity summary |
 | `flowmode detailed` | Show detailed stats with window titles |
 | `flowmode dashboard` | Open live TUI dashboard |
 | `flowmode apps` | List configured apps |
 | `flowmode reset` | Clear today's data |
 | `flowmode init` | Generate default config |
+| `flowmode update` | Self-update from GitHub |
+| `flowmode version` | Show version info |
 
 ### TUI Dashboard
 
@@ -279,7 +284,31 @@ xprop -id $(xdotool getactivewindow) WM_CLASS
 xprintidle
 ```
 
+## Web Dashboard
+
+When you run `flowmode start`, a web dashboard is available at **http://localhost:5555**
+
+**Features:**
+- Live-updating activity summary
+- App breakdown with category colors
+- Hourly activity chart
+- Detailed window title view
+- 30-day history
+- Dark theme
+
+Access via:
+- System tray → "Open Dashboard"
+- `flowmode web` command
+- Direct browser to localhost:5555
+
 ## Changelog
+
+### v0.4.0
+- Web dashboard with Svelte frontend (localhost:5555)
+- "Open Dashboard" in system tray opens browser
+- Self-update: `flowmode update` downloads latest from GitHub
+- `flowmode version` command
+- Single binary with embedded web assets
 
 ### v0.3.0
 - Multi-pane TUI dashboard with 3 tabs (Summary, Detailed, Timeline)

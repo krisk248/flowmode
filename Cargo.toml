@@ -1,6 +1,6 @@
 [package]
 name = "flowmode"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "Privacy-focused activity tracker for Linux"
 authors = ["Kannan"]
@@ -12,6 +12,7 @@ tokio = { version = "1", features = ["full", "signal"] }
 
 # Configuration
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 toml = "0.8"
 dirs = "5"
 
@@ -31,6 +32,18 @@ clap = { version = "4", features = ["derive"] }
 ratatui = "0.28"
 crossterm = "0.28"
 
+# Web server
+axum = "0.7"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["fs", "cors"] }
+
+# Embed static files
+rust-embed = "8"
+mime_guess = "2"
+
+# Self-update
+self_update = { version = "0.39", features = ["archive-tar", "compression-flate2"] }
+
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -38,6 +51,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Error handling
 anyhow = "1"
 thiserror = "1"
+
+# Open browser
+open = "5"
 
 [profile.release]
 opt-level = "z"

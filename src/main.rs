@@ -11,10 +11,13 @@ mod storage;
 mod tracker;
 mod tray;
 mod tui;
+mod web;
 
 use config::Config;
 use storage::Storage;
 use tray::{start_tray_service, TrayCommand, TrayHandles, format_duration};
+
+const WEB_PORT: u16 = 5555;
 
 #[derive(Parser)]
 #[command(name = "flowmode")]
@@ -31,7 +34,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Start FlowMode daemon (background tracking)
+    /// Start FlowMode daemon (background tracking + web dashboard)
     Start,
 
     /// Show today's activity stats (summary)
@@ -42,6 +45,9 @@ enum Commands {
 
     /// Show live TUI dashboard
     Dashboard,
+
+    /// Open web dashboard in browser
+    Web,
 
     /// List tracked apps
     Apps,
@@ -54,6 +60,12 @@ enum Commands {
 
     /// Generate default config
     Init,
+
+    /// Update FlowMode to the latest version
+    Update,
+
+    /// Show version info
+    Version,
 }
 
 #[tokio::main]
@@ -84,6 +96,9 @@ async fn main() -> Result<()> {
         Some(Commands::Dashboard) => {
             show_dashboard()
         }
+        Some(Commands::Web) => {
+            open_web_dashboard()
+        }
         Some(Commands::Apps) => {
             list_apps()
         }
@@ -96,12 +111,18 @@ async fn main() -> Result<()> {
         Some(Commands::Init) => {
             init_config()
         }
+        Some(Commands::Update) => {
+            self_update()
+        }
+        Some(Commands::Version) => {
+            show_version()
+        }
     }
 }
 
-/// Start the activity tracking daemon
+/// Start the activity tracking daemon with web server
 async fn start_daemon() -> Result<()> {
-    info!("Starting FlowMode activity tracker...");
+    info!("Starting FlowMode v{}...", env!("CARGO_PKG_VERSION"));
 
     // Load config
     let config = Config::load().unwrap_or_default();
@@ -112,6 +133,16 @@ async fn start_daemon() -> Result<()> {
 
     // Close any orphaned sessions from previous runs
     storage.close_open_sessions()?;
+
+    // Start web server in background
+    let db_path = Config::db_path();
+    tokio::spawn(async move {
+        if let Err(e) = web::start_web_server(db_path, WEB_PORT).await {
+            tracing::error!("Web server error: {}", e);
+        }
+    });
+
+    info!("Web dashboard at http://localhost:{}", WEB_PORT);
 
     // Start system tray
     let (tray_service, mut tray_rx, handles) = start_tray_service()?;
@@ -145,12 +176,12 @@ async fn start_daemon() -> Result<()> {
             // Handle tray commands
             Some(cmd) = tray_rx.recv() => {
                 match cmd {
-                    TrayCommand::ShowStats => {
-                        info!("Opening dashboard...");
-                        // Spawn TUI in separate process to not block
-                        let _ = std::process::Command::new("flowmode")
-                            .arg("dashboard")
-                            .spawn();
+                    TrayCommand::OpenDashboard => {
+                        info!("Opening web dashboard...");
+                        let url = format!("http://localhost:{}", WEB_PORT);
+                        if let Err(e) = open::that(&url) {
+                            tracing::error!("Failed to open browser: {}", e);
+                        }
                     }
                     TrayCommand::Pause => {
                         info!("Tracking paused");
@@ -280,6 +311,14 @@ fn show_dashboard() -> Result<()> {
     tui::run_tui(&storage)
 }
 
+/// Open web dashboard in browser
+fn open_web_dashboard() -> Result<()> {
+    let url = format!("http://localhost:{}", WEB_PORT);
+    println!("Opening {} in browser...", url);
+    open::that(&url)?;
+    Ok(())
+}
+
 /// List tracked apps
 fn list_apps() -> Result<()> {
     let config = Config::load().unwrap_or_default();
@@ -349,5 +388,43 @@ fn reset_today() -> Result<()> {
     println!("Today's activity data has been reset.");
     println!("Start fresh tracking now!");
 
+    Ok(())
+}
+
+/// Self-update from GitHub releases
+fn self_update() -> Result<()> {
+    println!("Checking for updates...");
+    println!("Current version: v{}", env!("CARGO_PKG_VERSION"));
+
+    let status = self_update::backends::github::Update::configure()
+        .repo_owner("krisk248")
+        .repo_name("flowmode")
+        .bin_name("flowmode")
+        .show_download_progress(true)
+        .current_version(self_update::cargo_crate_version!())
+        .build()?
+        .update()?;
+
+    match status {
+        self_update::Status::UpToDate(v) => {
+            println!("Already up to date! (v{})", v);
+        }
+        self_update::Status::Updated(v) => {
+            println!("Updated to v{}!", v);
+            println!("Restart FlowMode to use the new version.");
+        }
+    }
+
+    Ok(())
+}
+
+/// Show version info
+fn show_version() -> Result<()> {
+    println!("FlowMode v{}", env!("CARGO_PKG_VERSION"));
+    println!("Privacy-focused activity tracker for Linux");
+    println!();
+    println!("Web dashboard: http://localhost:{}", WEB_PORT);
+    println!("Config: {:?}", Config::config_path());
+    println!("Database: {:?}", Config::db_path());
     Ok(())
 }

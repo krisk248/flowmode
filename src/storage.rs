@@ -317,4 +317,36 @@ impl Storage {
         }
         Ok(results)
     }
+
+    /// Get history for the last N days
+    pub fn get_history_days(&self, days: i64) -> Result<Vec<(NaiveDate, i64)>> {
+        let today = Local::now().date_naive();
+        let start_date = today - Duration::days(days);
+
+        let mut stmt = self.conn.prepare(
+            "SELECT date(started_at) as day, SUM(duration_secs) as total
+             FROM activity
+             WHERE date(started_at) >= date(?1)
+             GROUP BY day
+             ORDER BY day DESC"
+        )?;
+
+        let rows = stmt.query_map(
+            params![start_date.to_string()],
+            |row| {
+                let date_str: String = row.get(0)?;
+                let total: i64 = row.get(1)?;
+                Ok((date_str, total))
+            }
+        )?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            let (date_str, total) = row?;
+            if let Ok(date) = NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
+                results.push((date, total));
+            }
+        }
+        Ok(results)
+    }
 }

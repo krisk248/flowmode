@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 /// Commands from tray menu
 #[derive(Debug, Clone)]
 pub enum TrayCommand {
-    ShowStats,
+    OpenDashboard,
     Pause,
     Resume,
     Quit,
@@ -160,6 +160,17 @@ impl Tray for FlowModeTray {
             StandardItem {
                 label: status_label,
                 enabled: false,
+                ..Default::default()
+            }.into(),
+
+            MenuItem::Separator,
+
+            // Open Dashboard
+            StandardItem {
+                label: "🌐 Open Dashboard".into(),
+                activate: Box::new(|tray: &mut Self| {
+                    let _ = tray.tx.blocking_send(TrayCommand::OpenDashboard);
+                }),
                 ..Default::default()
             }.into(),
 
