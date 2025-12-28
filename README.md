@@ -9,8 +9,8 @@ Unlike cloud-based alternatives (Wakatime, RescueTime), **all your data stays lo
 - **Privacy-first**: All data stored locally in SQLite
 - **Whitelist-based**: Only tracks apps you explicitly configure
 - **Window titles**: See which browser tabs, terminal folders, or files you worked on
-- **System tray**: Live tracking indicator with pause/resume
-- **TUI Dashboard**: Beautiful terminal UI with charts
+- **System tray**: Live tracking indicator with pause/resume and idle detection
+- **TUI Dashboard**: Multi-pane terminal UI with tabs (Summary, Detailed, Timeline)
 - **Idle detection**: Automatically pauses when you're away
 - **Lightweight**: ~3MB binary, minimal resource usage
 
@@ -62,6 +62,9 @@ flowmode start
 
 # View stats
 flowmode stats
+
+# Open TUI dashboard
+flowmode dashboard
 ```
 
 ### Commands
@@ -76,6 +79,22 @@ flowmode stats
 | `flowmode apps` | List configured apps |
 | `flowmode reset` | Clear today's data |
 | `flowmode init` | Generate default config |
+
+### TUI Dashboard
+
+The dashboard has 3 tabs with keyboard navigation:
+
+| Key | Action |
+|-----|--------|
+| `1` / `2` / `3` | Jump to Summary / Detailed / Timeline |
+| `Tab` / `Arrow keys` | Cycle through tabs |
+| `j` / `k` or `Up` / `Down` | Scroll in Detailed view |
+| `q` / `Esc` | Quit |
+
+**Tabs:**
+- **Summary**: App breakdown with progress bars
+- **Detailed**: Window titles grouped by app
+- **Timeline**: Hourly activity chart + category breakdown
 
 ### Example Output
 
@@ -134,10 +153,10 @@ pattern = "ghostty"
 category = "Terminal"
 
 [[apps]]
-name = "Claude Code"
+name = "Teams"
 match_type = "windowtitle"
-pattern = "Claude"
-category = "Development"
+pattern = "Microsoft Teams"
+category = "Communication"
 ```
 
 ### Match Types
@@ -152,6 +171,18 @@ category = "Development"
 # Click on a window to get its class
 xprop WM_CLASS | grep -i class
 ```
+
+## System Tray
+
+The tray icon shows:
+- **Date and time** in tooltip
+- **Working/Idle/Paused** status
+- **Today's tracked time**
+
+Icons change based on status:
+- Clock icon when working
+- Idle icon when away
+- Pause icon when paused
 
 ## Systemd Service (Auto-start)
 
@@ -247,6 +278,24 @@ xprop -id $(xdotool getactivewindow) WM_CLASS
 # Test xprintidle (returns milliseconds)
 xprintidle
 ```
+
+## Changelog
+
+### v0.3.0
+- Multi-pane TUI dashboard with 3 tabs (Summary, Detailed, Timeline)
+- Keyboard navigation (1/2/3, Tab, arrows, j/k)
+- Improved system tray with date, idle status, and dynamic icons
+- Hourly activity chart with current hour indicator
+- Category breakdown view
+- Better color-coded progress bars
+
+### v0.2.0
+- Initial release
+- Window tracking with xdotool
+- SQLite storage
+- System tray with ksni
+- Basic TUI dashboard
+- Idle detection with xprintidle
 
 ## License
 

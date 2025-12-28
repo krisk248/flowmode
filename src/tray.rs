@@ -1,5 +1,6 @@
-use ksni::{self, menu::StandardItem, Tray, TrayService};
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use chrono::Local;
+use ksni::{Tray, TrayService};
+use std::sync::{Arc, atomic::{AtomicBool, AtomicU64, Ordering}};
 use tokio::sync::mpsc;
 
 /// Commands from tray menu
@@ -14,7 +15,8 @@ pub enum TrayCommand {
 /// FlowMode system tray
 pub struct FlowModeTray {
     is_tracking: Arc<AtomicBool>,
-    current_app: Arc<std::sync::RwLock<String>>,
+    is_idle: Arc<AtomicBool>,
+    idle_secs: Arc<AtomicU64>,
     today_time: Arc<std::sync::RwLock<String>>,
     tx: mpsc::Sender<TrayCommand>,
 }
@@ -23,15 +25,10 @@ impl FlowModeTray {
     pub fn new(tx: mpsc::Sender<TrayCommand>) -> Self {
         Self {
             is_tracking: Arc::new(AtomicBool::new(true)),
-            current_app: Arc::new(std::sync::RwLock::new("Starting...".into())),
-            today_time: Arc::new(std::sync::RwLock::new("0h 0m".into())),
+            is_idle: Arc::new(AtomicBool::new(false)),
+            idle_secs: Arc::new(AtomicU64::new(0)),
+            today_time: Arc::new(std::sync::RwLock::new("0m".into())),
             tx,
-        }
-    }
-
-    pub fn set_current_app(&self, app: &str) {
-        if let Ok(mut current) = self.current_app.write() {
-            *current = app.to_string();
         }
     }
 
@@ -39,6 +36,11 @@ impl FlowModeTray {
         if let Ok(mut today) = self.today_time.write() {
             *today = time.to_string();
         }
+    }
+
+    pub fn set_idle(&self, idle: bool, secs: u64) {
+        self.is_idle.store(idle, Ordering::Relaxed);
+        self.idle_secs.store(secs, Ordering::Relaxed);
     }
 
     pub fn is_tracking(&self) -> bool {
@@ -49,8 +51,12 @@ impl FlowModeTray {
         self.is_tracking.clone()
     }
 
-    pub fn current_app_handle(&self) -> Arc<std::sync::RwLock<String>> {
-        self.current_app.clone()
+    pub fn idle_handle(&self) -> Arc<AtomicBool> {
+        self.is_idle.clone()
+    }
+
+    pub fn idle_secs_handle(&self) -> Arc<AtomicU64> {
+        self.idle_secs.clone()
     }
 
     pub fn today_time_handle(&self) -> Arc<std::sync::RwLock<String>> {
@@ -64,39 +70,52 @@ impl Tray for FlowModeTray {
     }
 
     fn icon_name(&self) -> String {
-        // Use a standard icon - clock/time related
-        "chronometer".into()
+        if self.is_idle.load(Ordering::Relaxed) {
+            "user-idle".into()
+        } else if self.is_tracking.load(Ordering::Relaxed) {
+            "chronometer".into()
+        } else {
+            "media-playback-pause".into()
+        }
     }
 
     fn title(&self) -> String {
         let time = self.today_time.read()
             .map(|t| t.clone())
-            .unwrap_or_else(|_| "0h".into());
-        format!("FlowMode - {}", time)
+            .unwrap_or_else(|_| "0m".into());
+
+        if self.is_idle.load(Ordering::Relaxed) {
+            format!("⏸ {}", time)
+        } else if self.is_tracking.load(Ordering::Relaxed) {
+            format!("▶ {}", time)
+        } else {
+            format!("⏹ {}", time)
+        }
     }
 
     fn tool_tip(&self) -> ksni::ToolTip {
-        let app = self.current_app.read()
-            .map(|a| a.clone())
-            .unwrap_or_else(|_| "Unknown".into());
         let time = self.today_time.read()
             .map(|t| t.clone())
-            .unwrap_or_else(|_| "0h 0m".into());
+            .unwrap_or_else(|_| "0m".into());
+        let date = Local::now().format("%a, %b %d").to_string();
 
-        let status = if self.is_tracking.load(Ordering::Relaxed) {
-            "Tracking"
+        let status = if self.is_idle.load(Ordering::Relaxed) {
+            let idle_mins = self.idle_secs.load(Ordering::Relaxed) / 60;
+            format!("Idle ({}m)", idle_mins)
+        } else if self.is_tracking.load(Ordering::Relaxed) {
+            "Working".into()
         } else {
-            "Paused"
+            "Paused".into()
         };
 
         ksni::ToolTip {
             icon_name: "chronometer".into(),
             title: "FlowMode".into(),
             description: format!(
-                "<b>Status:</b> {}<br/>\
-                 <b>Current:</b> {}<br/>\
+                "<b>{}</b><br/>\
+                 <b>Status:</b> {}<br/>\
                  <b>Today:</b> {}",
-                status, app, time
+                date, status, time
             ),
             icon_pixmap: Vec::new(),
         }
@@ -106,40 +125,41 @@ impl Tray for FlowModeTray {
         use ksni::menu::*;
 
         let is_tracking = self.is_tracking.load(Ordering::Relaxed);
+        let is_idle = self.is_idle.load(Ordering::Relaxed);
+        let date = Local::now().format("%a, %b %d").to_string();
+
+        let status_label = if is_idle {
+            let idle_mins = self.idle_secs.load(Ordering::Relaxed) / 60;
+            format!("⏸ Idle ({}m)", idle_mins)
+        } else if is_tracking {
+            "▶ Working".into()
+        } else {
+            "⏹ Paused".into()
+        };
 
         vec![
-            // Header showing current status
+            // Date header
             StandardItem {
-                label: format!("Today: {}",
+                label: format!("📅 {}", date),
+                enabled: false,
+                ..Default::default()
+            }.into(),
+
+            // Today's time
+            StandardItem {
+                label: format!("⏱ Today: {}",
                     self.today_time.read()
                         .map(|t| t.clone())
-                        .unwrap_or_else(|_| "0h 0m".into())
+                        .unwrap_or_else(|_| "0m".into())
                 ),
                 enabled: false,
                 ..Default::default()
             }.into(),
 
-            MenuItem::Separator,
-
-            // Current app
+            // Status
             StandardItem {
-                label: format!("Tracking: {}",
-                    self.current_app.read()
-                        .map(|a| a.clone())
-                        .unwrap_or_else(|_| "None".into())
-                ),
+                label: status_label,
                 enabled: false,
-                ..Default::default()
-            }.into(),
-
-            MenuItem::Separator,
-
-            // Show TUI stats
-            StandardItem {
-                label: "Show Stats (TUI)".into(),
-                activate: Box::new(|tray: &mut Self| {
-                    let _ = tray.tx.blocking_send(TrayCommand::ShowStats);
-                }),
                 ..Default::default()
             }.into(),
 
@@ -148,7 +168,7 @@ impl Tray for FlowModeTray {
             // Pause/Resume
             if is_tracking {
                 StandardItem {
-                    label: "Pause Tracking".into(),
+                    label: "⏸ Pause".into(),
                     activate: Box::new(|tray: &mut Self| {
                         tray.is_tracking.store(false, Ordering::Relaxed);
                         let _ = tray.tx.blocking_send(TrayCommand::Pause);
@@ -157,7 +177,7 @@ impl Tray for FlowModeTray {
                 }.into()
             } else {
                 StandardItem {
-                    label: "Resume Tracking".into(),
+                    label: "▶ Resume".into(),
                     activate: Box::new(|tray: &mut Self| {
                         tray.is_tracking.store(true, Ordering::Relaxed);
                         let _ = tray.tx.blocking_send(TrayCommand::Resume);
@@ -170,7 +190,7 @@ impl Tray for FlowModeTray {
 
             // Quit
             StandardItem {
-                label: "Quit".into(),
+                label: "✕ Quit".into(),
                 icon_name: "application-exit".into(),
                 activate: Box::new(|tray: &mut Self| {
                     let _ = tray.tx.blocking_send(TrayCommand::Quit);
@@ -181,24 +201,33 @@ impl Tray for FlowModeTray {
     }
 }
 
+/// Handles returned from tray service
+pub struct TrayHandles {
+    pub tracking: Arc<AtomicBool>,
+    pub is_idle: Arc<AtomicBool>,
+    pub idle_secs: Arc<AtomicU64>,
+    pub today_time: Arc<std::sync::RwLock<String>>,
+}
+
 /// Start the tray service
 pub fn start_tray_service() -> anyhow::Result<(
     TrayService<FlowModeTray>,
     mpsc::Receiver<TrayCommand>,
-    Arc<AtomicBool>,
-    Arc<std::sync::RwLock<String>>,
-    Arc<std::sync::RwLock<String>>,
+    TrayHandles,
 )> {
     let (tx, rx) = mpsc::channel(100);
     let tray = FlowModeTray::new(tx);
 
-    let tracking = tray.tracking_handle();
-    let current_app = tray.current_app_handle();
-    let today_time = tray.today_time_handle();
+    let handles = TrayHandles {
+        tracking: tray.tracking_handle(),
+        is_idle: tray.idle_handle(),
+        idle_secs: tray.idle_secs_handle(),
+        today_time: tray.today_time_handle(),
+    };
 
     let service = TrayService::new(tray);
 
-    Ok((service, rx, tracking, current_app, today_time))
+    Ok((service, rx, handles))
 }
 
 /// Format seconds as "Xh Ym"

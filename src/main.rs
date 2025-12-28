@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{info, warn, error, debug, Level};
+use tracing::{info, debug, Level};
 use tracing_subscriber::FmtSubscriber;
 
 mod config;
@@ -14,7 +14,7 @@ mod tui;
 
 use config::Config;
 use storage::Storage;
-use tray::{start_tray_service, TrayCommand, format_duration};
+use tray::{start_tray_service, TrayCommand, TrayHandles, format_duration};
 
 #[derive(Parser)]
 #[command(name = "flowmode")]
@@ -114,7 +114,8 @@ async fn start_daemon() -> Result<()> {
     storage.close_open_sessions()?;
 
     // Start system tray
-    let (tray_service, mut tray_rx, is_tracking, current_app, today_time) = start_tray_service()?;
+    let (tray_service, mut tray_rx, handles) = start_tray_service()?;
+    let TrayHandles { tracking: is_tracking, is_idle, idle_secs: idle_secs_handle, today_time } = handles;
 
     // Spawn tray in separate thread
     std::thread::spawn(move || {
@@ -158,9 +159,6 @@ async fn start_daemon() -> Result<()> {
                         if let Some(id) = session.take() {
                             storage.end_activity(id)?;
                         }
-                        if let Ok(mut app) = current_app.write() {
-                            *app = "Paused".into();
-                        }
                     }
                     TrayCommand::Resume => {
                         info!("Tracking resumed");
@@ -187,15 +185,19 @@ async fn start_daemon() -> Result<()> {
                 let idle_secs = tracker::get_idle_time_secs().unwrap_or(0);
                 if idle_secs > idle_timeout {
                     debug!("User idle for {}s", idle_secs);
+                    // Update tray idle status
+                    is_idle.store(true, Ordering::Relaxed);
+                    idle_secs_handle.store(idle_secs, Ordering::Relaxed);
                     // End current session if any
                     let mut session = current_session.write().await;
                     if let Some(id) = session.take() {
                         storage.end_activity(id)?;
-                        if let Ok(mut app) = current_app.write() {
-                            *app = "Idle".into();
-                        }
                     }
                     continue;
+                } else {
+                    // Not idle - clear idle status
+                    is_idle.store(false, Ordering::Relaxed);
+                    idle_secs_handle.store(0, Ordering::Relaxed);
                 }
 
                 // Get active window
@@ -227,20 +229,12 @@ async fn start_daemon() -> Result<()> {
                                 *session = Some(id);
 
                                 info!("Tracking: {} ({})", app.name, app.category);
-
-                                // Update tray
-                                if let Ok(mut current) = current_app.write() {
-                                    *current = app.name.clone();
-                                }
                             }
                         } else {
                             // Not a tracked app - end session
                             let mut session = current_session.write().await;
                             if let Some(id) = session.take() {
                                 storage.end_activity(id)?;
-                            }
-                            if let Ok(mut app) = current_app.write() {
-                                *app = "Other".into();
                             }
                         }
                     }
