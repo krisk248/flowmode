@@ -1,6 +1,6 @@
 [package]
 name = "flowmode"
-version = "0.4.0"
+version = "0.5.0"
 edition = "2021"
 description = "Privacy-focused activity tracker for Linux"
 authors = ["Kannan"]
@@ -51,6 +51,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Error handling
 anyhow = "1"
 thiserror = "1"
+
+# Title parsing
+regex = "1"
 
 # Open browser
 open = "5"

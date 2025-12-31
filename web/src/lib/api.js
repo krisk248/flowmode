@@ -20,6 +20,21 @@ export async function fetchHistory() {
   return res.json();
 }
 
+export async function fetchAnalyticsSummary() {
+  const res = await fetch(`${API_BASE}/analytics/summary`);
+  return res.json();
+}
+
+export async function fetchAnalyticsTrends() {
+  const res = await fetch(`${API_BASE}/analytics/trends`);
+  return res.json();
+}
+
+export async function fetchAnalyticsBurnout() {
+  const res = await fetch(`${API_BASE}/analytics/burnout`);
+  return res.json();
+}
+
 export async function fetchStatus() {
   const res = await fetch(`${API_BASE}/status`);
   return res.json();
@@ -59,4 +74,35 @@ export function getCategoryColor(category) {
     'Files': '#94a3b8',
   };
   return map[category] || '#6e7681';
+}
+
+// Pomodoro API
+export async function fetchPomodoroStatus() {
+  const res = await fetch(`${API_BASE}/pomodoro/status`);
+  return res.json();
+}
+
+export async function startPomodoro() {
+  const res = await fetch(`${API_BASE}/pomodoro/start`, { method: 'POST' });
+  return res.json();
+}
+
+export async function pausePomodoro() {
+  const res = await fetch(`${API_BASE}/pomodoro/pause`, { method: 'POST' });
+  return res.json();
+}
+
+export async function resumePomodoro() {
+  const res = await fetch(`${API_BASE}/pomodoro/resume`, { method: 'POST' });
+  return res.json();
+}
+
+export async function resetPomodoro() {
+  const res = await fetch(`${API_BASE}/pomodoro/reset`, { method: 'POST' });
+  return res.json();
+}
+
+export async function skipPomodoro() {
+  const res = await fetch(`${API_BASE}/pomodoro/skip`, { method: 'POST' });
+  return res.json();
 }

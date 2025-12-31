@@ -241,14 +241,19 @@ pub fn start_tray_service() -> anyhow::Result<(
     Ok((service, rx, handles))
 }
 
-/// Format seconds as "Xh Ym"
+/// Format seconds as "Xh Ym" or "Xs" for small values
 pub fn format_duration(secs: i64) -> String {
     let hours = secs / 3600;
     let minutes = (secs % 3600) / 60;
+    let seconds = secs % 60;
 
     if hours > 0 {
         format!("{}h {}m", hours, minutes)
-    } else {
+    } else if minutes > 0 {
         format!("{}m", minutes)
+    } else if secs > 0 {
+        format!("{}s", seconds)
+    } else {
+        "0s".to_string()
     }
 }

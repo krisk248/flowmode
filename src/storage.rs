@@ -22,6 +22,8 @@ pub struct AppSummary {
     pub app_name: String,
     pub category: String,
     pub total_secs: i64,
+    pub active_secs: i64,
+    pub passive_secs: i64,
 }
 
 /// Hourly breakdown
@@ -29,6 +31,14 @@ pub struct AppSummary {
 pub struct HourlyActivity {
     pub hour: u32,
     pub total_secs: i64,
+}
+
+/// Hourly breakdown with active/passive detail
+#[derive(Debug, Clone)]
+pub struct HourlyActivityDetailed {
+    pub hour: u32,
+    pub active_secs: i64,
+    pub passive_secs: i64,
 }
 
 /// Database for storing activity
@@ -67,6 +77,19 @@ impl Storage {
             [],
         )?;
 
+        // v0.5.0 Migration: Add active_secs and passive_secs columns
+        let has_active_secs: bool = conn
+            .prepare("SELECT active_secs FROM activity LIMIT 1")
+            .is_ok();
+
+        if !has_active_secs {
+            // Add new columns
+            conn.execute("ALTER TABLE activity ADD COLUMN active_secs INTEGER DEFAULT 0", [])?;
+            conn.execute("ALTER TABLE activity ADD COLUMN passive_secs INTEGER DEFAULT 0", [])?;
+            // Backfill: assume all existing time was active
+            conn.execute("UPDATE activity SET active_secs = duration_secs WHERE active_secs = 0 AND duration_secs > 0", [])?;
+        }
+
         Ok(Self { conn })
     }
 
@@ -90,6 +113,20 @@ impl Storage {
                  duration_secs = CAST((julianday(?1) - julianday(started_at)) * 86400 AS INTEGER)
              WHERE id = ?2",
             params![now.to_rfc3339(), id],
+        )?;
+        Ok(())
+    }
+
+    /// Update activity time counters (active_secs or passive_secs)
+    /// Called periodically during tracking to increment the appropriate counter
+    pub fn update_activity_time(&self, id: i64, active_delta: i64, passive_delta: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE activity
+             SET active_secs = active_secs + ?1,
+                 passive_secs = passive_secs + ?2,
+                 duration_secs = duration_secs + ?1 + ?2
+             WHERE id = ?3",
+            params![active_delta, passive_delta, id],
         )?;
         Ok(())
     }
@@ -142,7 +179,8 @@ impl Storage {
         let end = start + Duration::days(1);
 
         let mut stmt = self.conn.prepare(
-            "SELECT app_name, category, SUM(duration_secs) as total
+            "SELECT app_name, category, SUM(duration_secs) as total,
+                    SUM(active_secs) as active, SUM(passive_secs) as passive
              FROM activity
              WHERE started_at >= ?1 AND started_at < ?2
              GROUP BY app_name, category
@@ -156,6 +194,8 @@ impl Storage {
                     app_name: row.get(0)?,
                     category: row.get(1)?,
                     total_secs: row.get(2)?,
+                    active_secs: row.get(3)?,
+                    passive_secs: row.get(4)?,
                 })
             }
         )?;
@@ -217,6 +257,57 @@ impl Storage {
         let mut result: Vec<HourlyActivity> = hourly
             .into_iter()
             .map(|(hour, total_secs)| HourlyActivity { hour, total_secs })
+            .collect();
+        result.sort_by_key(|h| h.hour);
+
+        Ok(result)
+    }
+
+    /// Get hourly breakdown with active/passive detail for today
+    pub fn get_today_hourly_detailed(&self) -> Result<Vec<HourlyActivityDetailed>> {
+        let today = Local::now().date_naive();
+        let start = today.and_hms_opt(0, 0, 0).unwrap().and_local_timezone(Local).unwrap();
+        let end = start + Duration::days(1);
+
+        let mut stmt = self.conn.prepare(
+            "SELECT started_at, active_secs, passive_secs
+             FROM activity
+             WHERE started_at >= ?1 AND started_at < ?2"
+        )?;
+
+        let rows = stmt.query_map(
+            params![start.to_rfc3339(), end.to_rfc3339()],
+            |row| {
+                let started_str: String = row.get(0)?;
+                let active: i64 = row.get(1)?;
+                let passive: i64 = row.get(2)?;
+                Ok((started_str, active, passive))
+            }
+        )?;
+
+        let mut hourly_active: HashMap<u32, i64> = HashMap::new();
+        let mut hourly_passive: HashMap<u32, i64> = HashMap::new();
+
+        for row in rows {
+            let (started_str, active, passive) = row?;
+            if let Ok(dt) = DateTime::parse_from_rfc3339(&started_str) {
+                let hour = dt.hour();
+                *hourly_active.entry(hour).or_insert(0) += active;
+                *hourly_passive.entry(hour).or_insert(0) += passive;
+            }
+        }
+
+        // Combine into result for all hours that have data
+        let mut hours: std::collections::HashSet<u32> = hourly_active.keys().copied().collect();
+        hours.extend(hourly_passive.keys().copied());
+
+        let mut result: Vec<HourlyActivityDetailed> = hours
+            .into_iter()
+            .map(|hour| HourlyActivityDetailed {
+                hour,
+                active_secs: *hourly_active.get(&hour).unwrap_or(&0),
+                passive_secs: *hourly_passive.get(&hour).unwrap_or(&0),
+            })
             .collect();
         result.sort_by_key(|h| h.hour);
 
@@ -296,6 +387,7 @@ impl Storage {
              FROM activity
              WHERE started_at >= ?1 AND started_at < ?2
              GROUP BY app_name, window_title
+             HAVING total >= 5
              ORDER BY app_name, total DESC"
         )?;
 

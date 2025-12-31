@@ -8,6 +8,8 @@ use tracing_subscriber::FmtSubscriber;
 
 mod config;
 mod storage;
+mod pomodoro;
+mod title_parser;
 mod tracker;
 mod tray;
 mod tui;
@@ -18,6 +20,9 @@ use storage::Storage;
 use tray::{start_tray_service, TrayCommand, TrayHandles, format_duration};
 
 const WEB_PORT: u16 = 5555;
+
+/// Micro-idle threshold: below this = active, above = passive (until full idle)
+const MICRO_IDLE_THRESHOLD_SECS: u64 = 30;
 
 #[derive(Parser)]
 #[command(name = "flowmode")]
@@ -260,6 +265,18 @@ async fn start_daemon() -> Result<()> {
                                 *session = Some(id);
 
                                 info!("Tracking: {} ({})", app.name, app.category);
+                            } else if let Some(id) = *session {
+                                // Update activity time based on micro-idle level
+                                // < 30s idle = active (typing/clicking)
+                                // 30-300s idle = passive (reading/away but window focused)
+                                let poll_secs = poll_interval.as_secs() as i64;
+                                if idle_secs < MICRO_IDLE_THRESHOLD_SECS {
+                                    // Active: user recently interacted
+                                    storage.update_activity_time(id, poll_secs, 0)?;
+                                } else {
+                                    // Passive: window focused but user reading/away
+                                    storage.update_activity_time(id, 0, poll_secs)?;
+                                }
                             }
                         } else {
                             // Not a tracked app - end session
